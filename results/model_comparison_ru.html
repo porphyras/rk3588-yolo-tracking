@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YOLO на NPU RK3588</title>
+<style>
+  :root {
+    --bg: #f5f6f4;
+    --surface: #ffffff;
+    --ink: #1c2321;
+    --muted: #5d6763;
+    --line: #dde2df;
+    --soft: #eef1ef;
+    --v5: #a0742a;
+    --v8: #3a6ea5;
+    --v11: #1f8a67;
+    --perf: #c2410c;
+    --best-bg: #e3f2ea;
+    --best-ink: #145c44;
+    --sans: -apple-system, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #141917;
+      --surface: #1b211f;
+      --ink: #e6ebe8;
+      --muted: #9aa5a0;
+      --line: #2e3633;
+      --soft: #222a27;
+      --v5: #d4a24e;
+      --v8: #6f9fd6;
+      --v11: #45b98f;
+      --perf: #f08a4b;
+      --best-bg: #1d3a2f;
+      --best-ink: #8fdcbc;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141917;
+    --surface: #1b211f;
+    --ink: #e6ebe8;
+    --muted: #9aa5a0;
+    --line: #2e3633;
+    --soft: #222a27;
+    --v5: #d4a24e;
+    --v8: #6f9fd6;
+    --v11: #45b98f;
+    --perf: #f08a4b;
+    --best-bg: #1d3a2f;
+    --best-ink: #8fdcbc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 var(--sans);
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 20px 64px;
+    display: grid;
+    gap: 44px;
+  }
+  header { display: grid; gap: 10px; }
+  .eyebrow {
+    font: 600 12px/1.2 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 {
+    font-size: clamp(28px, 4.5vw, 40px);
+    line-height: 1.1;
+    margin: 0;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+  h2 { font-size: 22px; margin: 0; font-weight: 650; text-wrap: balance; }
+  h3 { font-size: 16px; margin: 0; font-weight: 600; }
+  p { margin: 0; max-width: 72ch; }
+  .lead { color: var(--muted); font-size: 16px; }
+  section { display: grid; gap: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+  .chip::before {
+    content: "";
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    background: var(--c);
+    flex: none;
+  }
+  .m5 { --c: var(--v5); }
+  .m8 { --c: var(--v8); }
+  .m11 { --c: var(--v11); }
+
+  .findings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 6px;
+    align-content: start;
+  }
+  .finding .num {
+    font: 600 26px/1.1 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .finding p { color: var(--muted); font-size: 14px; }
+
+  .table-box {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 9px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font: 600 12px/1.3 var(--sans);
+    color: var(--muted);
+    background: var(--soft);
+    white-space: normal;
+    vertical-align: bottom;
+  }
+  thead tr.top th { text-align: center; border-bottom: 0; padding-bottom: 2px; color: var(--ink); }
+  thead tr.top th:first-child { text-align: left; }
+  th.sep, td.sep { border-left: 1px solid var(--line); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td:first-child { font-family: var(--sans); font-weight: 600; }
+  td.best { background: var(--best-bg); color: var(--best-ink); font-weight: 600; }
+  td.p { color: var(--perf); font-weight: 600; }
+  tr.group td {
+    background: var(--soft);
+    font: 600 13px/1.3 var(--sans);
+    color: var(--muted);
+    text-align: left;
+    white-space: normal;
+  }
+  .sub { display: block; font: 400 12px/1.3 var(--sans); color: var(--muted); }
+
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 12px;
+    align-content: start;
+  }
+  .bars { display: grid; gap: 10px; }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 76px 1fr 52px;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+  }
+  .bar-row .name { font-weight: 600; }
+  .track { height: 14px; background: var(--soft); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; background: var(--c); border-radius: 4px; }
+  .fill.perf { background: var(--perf); }
+  .bar-row .val { font: 600 14px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .pair { display: grid; gap: 4px; }
+  .pair .bar-row { grid-template-columns: 76px 1fr 52px; }
+  .pair .bar-row .name { font-weight: 400; color: var(--muted); font-size: 13px; }
+  .model-label { font-weight: 600; font-size: 14px; }
+  .key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .key span { display: inline-flex; align-items: center; gap: 6px; }
+  .key i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .note { color: var(--muted); font-size: 13px; }
+  ul { margin: 0; padding-left: 20px; display: grid; gap: 7px; max-width: 76ch; }
+  code { font-family: var(--mono); font-size: 13px; }
+  .conditions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .cond {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    gap: 6px;
+    font-size: 14px;
+  }
+  .cond dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; }
+  .cond dt { color: var(--muted); }
+  .cond dd { margin: 0; font-family: var(--mono); font-size: 13px; }
+
+  @media (max-width: 480px) {
+    .wrap { padding: 28px 16px 48px; gap: 34px; }
+    .bar-row, .pair .bar-row { grid-template-columns: 64px 1fr 46px; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">RK3588 · NPU · int8 · v5_models/track.py (детектор + NanoTrack)</div>
+    <h1>YOLOv5n, YOLOv8n и YOLO11n на плате RK3588</h1>
+    <p class="lead">Три детектора сконвертированы в RKNN одинаково и прогнаны через одну и ту же программу на двух видео, в обычном режиме платы и в режиме максимальной производительности. Точность измерена на 500 изображениях COCO val2017.</p>
+    <div class="legend">
+      <span class="chip m5">YOLOv5n</span>
+      <span class="chip m8">YOLOv8n</span>
+      <span class="chip m11">YOLO11n</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Главное</h2>
+    <div class="findings">
+      <div class="finding">
+        <span class="eyebrow">Точность</span>
+        <span class="num">+9.3</span>
+        <p>пункта mAP@0.5:0.95 у YOLO11n по сравнению с YOLOv5n (40.4 против 31.1, int8, вход 640×480). YOLOv8n даёт +7.2.</p>
+      </div>
+      <div class="finding">
+        <span class="eyebrow">Скорость программы</span>
+        <span class="num">≤ 2.8 FPS</span>
+        <p>разница между моделями на одном видео. Детектор срабатывает примерно раз в секунду, а время кадра определяет трекер.</p>
+      </div>
+      <div class="finding">
+        <span class="eyebrow">Режим performance</span>
+        <span class="num">+8–10%</span>
+        <p>FPS у всех моделей. Трекер ускоряется на 8–11%, первый запуск детектора — на 32–48%.</p>
+      </div>
+      <div class="finding">
+        <span class="eyebrow">Номера объектов</span>
+        <span class="num">1 номер</span>
+        <p>на всё видео person7: человек несколько раз убегает из кадра и возвращается под своим номером #1 у всех трёх моделей.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Точность на COCO</h2>
+    <p class="note">500 изображений COCO val2017, 3552 объекта. Квантованные модели проверены в симуляторе rknn-toolkit2, который воспроизводит int8-арифметику NPU. Постобработка та же, что на плате.</p>
+    <div class="charts">
+      <div class="chart-card">
+        <h3>mAP@0.5:0.95, int8, вход 640×480</h3>
+        <div class="bars">
+          <div class="bar-row m5"><span class="name">YOLOv5n</span><div class="track"><div class="fill" style="width: 69.1%"></div></div><span class="val">31.1</span></div>
+          <div class="bar-row m8"><span class="name">YOLOv8n</span><div class="track"><div class="fill" style="width: 85.1%"></div></div><span class="val">38.3</span></div>
+          <div class="bar-row m11"><span class="name">YOLO11n</span><div class="track"><div class="fill" style="width: 89.8%"></div></div><span class="val">40.4</span></div>
+        </div>
+        <span class="note">Шкала от 0 до 45.</span>
+      </div>
+      <div class="chart-card">
+        <h3>AP@0.5:0.95 для класса «человек», int8, 640×480</h3>
+        <div class="bars">
+          <div class="bar-row m5"><span class="name">YOLOv5n</span><div class="track"><div class="fill" style="width: 72.5%"></div></div><span class="val">39.9</span></div>
+          <div class="bar-row m8"><span class="name">YOLOv8n</span><div class="track"><div class="fill" style="width: 86.0%"></div></div><span class="val">47.3</span></div>
+          <div class="bar-row m11"><span class="name">YOLO11n</span><div class="track"><div class="fill" style="width: 87.3%"></div></div><span class="val">48.0</span></div>
+        </div>
+        <span class="note">Шкала от 0 до 55.</span>
+      </div>
+    </div>
+
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th>Модель</th>
+            <th>mAP@0.5<span class="sub">640×480, int8</span></th>
+            <th>mAP@0.5:0.95<span class="sub">640×480, int8</span></th>
+            <th>mAP@0.5:0.95<span class="sub">640×640, int8</span></th>
+            <th>AP@0.5 «человек»<span class="sub">640×480, int8</span></th>
+            <th>Потеря от int8<span class="sub">mAP@0.5:0.95, 640×480</span></th>
+            <th>Параметров</th>
+            <th>GFLOPs<span class="sub">на 640×640</span></th>
+            <th>Файл RKNN</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="chip m5">YOLOv5n</span></td>
+            <td>50.4</td><td>31.1</td><td>30.9</td><td>70.8</td><td>−0.8</td>
+            <td class="best">1.9 млн</td><td class="best">4.5</td><td class="best">2.9 МБ</td>
+          </tr>
+          <tr>
+            <td><span class="chip m8">YOLOv8n</span></td>
+            <td>54.5</td><td>38.3</td><td>38.9</td><td class="best">73.8</td><td>−1.4</td>
+            <td>3.2 млн</td><td>8.7</td><td>4.3 МБ</td>
+          </tr>
+          <tr>
+            <td><span class="chip m11">YOLO11n</span></td>
+            <td class="best">57.1</td><td class="best">40.4</td><td class="best">41.0</td><td class="best">73.8</td><td class="best">−0.5</td>
+            <td>2.6 млн</td><td>6.5</td><td>4.2 МБ</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Потеря от int8 — разница с исходными весами float32 на том же входе. Калибровка у всех моделей одинаковая: для 640×480 — 50 кадров видео, для 640×640 — 20 изображений COCO. Зелёным выделено лучшее значение в столбце.</p>
+  </section>
+
+  <section>
+    <h2>Условия прогона на плате</h2>
+    <div class="conditions">
+      <div class="cond">
+        <h3>Обычный режим</h3>
+        <dl>
+          <dt>Процессор</dt><dd>schedutil</dd>
+          <dt>Память (DMC)</dt><dd>dmc_ondemand, 528 МГц</dd>
+          <dt>NPU</dt><dd>rknpu_ondemand, 1000 МГц</dd>
+        </dl>
+      </div>
+      <div class="cond">
+        <h3>Режим performance</h3>
+        <dl>
+          <dt>Процессор</dt><dd>performance</dd>
+          <dt>Память (DMC)</dt><dd>performance, 2112 МГц</dd>
+          <dt>NPU</dt><dd>performance, 1000 МГц</dd>
+        </dl>
+      </div>
+    </div>
+    <p class="note">Программа <code>v5_models/track.py</code>: детектор на NPU находит объекты, NanoTrack ведёт их в трёх процессах, детектор перезапускается при потере объекта и раз в 30 кадров. У всех прогонов одинаковые флаги и включена запись видео, прогоны идут по очереди с паузой. Режим performance включён скриптом <code>set_performance.sh</code>.</p>
+  </section>
+
+  <section>
+    <h2>Скорость на плате</h2>
+    <div class="key">
+      <span><i style="background: var(--muted)"></i>обычный режим (цвет модели)</span>
+      <span><i style="background: var(--perf)"></i>режим performance</span>
+    </div>
+    <div class="charts">
+      <div class="chart-card">
+        <h3>Средний FPS, video2 (четыре человека)</h3>
+        <div class="bars">
+          <div class="pair m5">
+            <span class="model-label">YOLOv5n</span>
+            <div class="bar-row"><span class="name">обычный</span><div class="track"><div class="fill" style="width: 46.3%"></div></div><span class="val">32.4</span></div>
+            <div class="bar-row"><span class="name">performance</span><div class="track"><div class="fill perf" style="width: 50.7%"></div></div><span class="val">35.5</span></div>
+          </div>
+          <div class="pair m8">
+            <span class="model-label">YOLOv8n</span>
+            <div class="bar-row"><span class="name">обычный</span><div class="track"><div class="fill" style="width: 44.1%"></div></div><span class="val">30.9</span></div>
+            <div class="bar-row"><span class="name">performance</span><div class="track"><div class="fill perf" style="width: 47.9%"></div></div><span class="val">33.5</span></div>
+          </div>
+          <div class="pair m11">
+            <span class="model-label">YOLO11n</span>
+            <div class="bar-row"><span class="name">обычный</span><div class="track"><div class="fill" style="width: 42.9%"></div></div><span class="val">30.0</span></div>
+            <div class="bar-row"><span class="name">performance</span><div class="track"><div class="fill perf" style="width: 46.7%"></div></div><span class="val">32.7</span></div>
+          </div>
+        </div>
+        <span class="note">Шкала от 0 до 70 FPS.</span>
+      </div>
+      <div class="chart-card">
+        <h3>Средний FPS, person7 (один человек)</h3>
+        <div class="bars">
+          <div class="pair m5">
+            <span class="model-label">YOLOv5n</span>
+            <div class="bar-row"><span class="name">обычный</span><div class="track"><div class="fill" style="width: 80.7%"></div></div><span class="val">56.5</span></div>
+            <div class="bar-row"><span class="name">performance</span><div class="track"><div class="fill perf" style="width: 88.0%"></div></div><span class="val">61.6</span></div>
+          </div>
+          <div class="pair m8">
+            <span class="model-label">YOLOv8n</span>
+            <div class="bar-row"><span class="name">обычный</span><div class="track"><div class="fill" style="width: 81.0%"></div></div><span class="val">56.7</span></div>
+            <div class="bar-row"><span class="name">performance</span><div class="track"><div class="fill perf" style="width: 89.1%"></div></div><span class="val">62.4</span></div>
+          </div>
+          <div class="pair m11">
+            <span class="model-label">YOLO11n</span>
+            <div class="bar-row"><span class="name">обычный</span><div class="track"><div class="fill" style="width: 80.9%"></div></div><span class="val">56.6</span></div>
+            <div class="bar-row"><span class="name">performance</span><div class="track"><div class="fill perf" style="width: 89.1%"></div></div><span class="val">62.4</span></div>
+          </div>
+        </div>
+        <span class="note">Шкала от 0 до 70 FPS.</span>
+      </div>
+    </div>
+
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr class="top">
+            <th></th>
+            <th colspan="2" class="sep">Средний FPS</th>
+            <th colspan="2" class="sep">Детектор, мс на запуск</th>
+            <th colspan="2" class="sep">Первый запуск детектора, мс</th>
+            <th colspan="2" class="sep">Трекер, мс на объект</th>
+          </tr>
+          <tr>
+            <th>Модель</th>
+            <th class="sep">обычный</th><th>performance</th>
+            <th class="sep">обычный</th><th>performance</th>
+            <th class="sep">обычный</th><th>performance</th>
+            <th class="sep">обычный</th><th>performance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group"><td colspan="9">video2 · 577 кадров · 464×848 · четыре человека, пересечения · вход детектора 640×640 · детектор запускался 23 раза</td></tr>
+          <tr>
+            <td><span class="chip m5">YOLOv5n</span></td>
+            <td class="sep best">32.4</td><td class="p">35.5</td>
+            <td class="sep">45.8</td><td class="p">41.7</td>
+            <td class="sep best">57.5</td><td class="p">35.8</td>
+            <td class="sep">18.4</td><td class="p">16.4</td>
+          </tr>
+          <tr>
+            <td><span class="chip m8">YOLOv8n</span></td>
+            <td class="sep">30.9</td><td class="p">33.5</td>
+            <td class="sep best">40.9</td><td class="p">38.8</td>
+            <td class="sep">60.3</td><td class="p">31.6</td>
+            <td class="sep">18.2</td><td class="p">16.3</td>
+          </tr>
+          <tr>
+            <td><span class="chip m11">YOLO11n</span></td>
+            <td class="sep">30.0</td><td class="p">32.7</td>
+            <td class="sep">44.6</td><td class="p">38.9</td>
+            <td class="sep">58.9</td><td class="p">35.2</td>
+            <td class="sep best">17.9</td><td class="p">16.3</td>
+          </tr>
+          <tr class="group"><td colspan="9">person7 · 1799 кадров, 60 с · 1280×720 · один человек, съёмка с высоты · вход детектора 640×480 · детектор запускался 54 раза</td></tr>
+          <tr>
+            <td><span class="chip m5">YOLOv5n</span></td>
+            <td class="sep">56.5</td><td class="p">61.6</td>
+            <td class="sep">33.0</td><td class="p">28.4</td>
+            <td class="sep">40.3</td><td class="p">26.8</td>
+            <td class="sep best">16.5</td><td class="p">15.2</td>
+          </tr>
+          <tr>
+            <td><span class="chip m8">YOLOv8n</span></td>
+            <td class="sep best">56.7</td><td class="p">62.4</td>
+            <td class="sep best">29.4</td><td class="p">24.7</td>
+            <td class="sep best">40.0</td><td class="p">27.2</td>
+            <td class="sep">16.6</td><td class="p">15.1</td>
+          </tr>
+          <tr>
+            <td><span class="chip m11">YOLO11n</span></td>
+            <td class="sep">56.6</td><td class="p">62.4</td>
+            <td class="sep">31.7</td><td class="p">26.6</td>
+            <td class="sep">45.8</td><td class="p">29.1</td>
+            <td class="sep">16.6</td><td class="p">15.1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Время детектора измерено в программе целиком: подготовка кадра, работа NPU, чтение выходов и постобработка. Первый запуск включает прогрев модели. Зелёным выделено лучшее значение обычного режима, оранжевым — значения режима performance.</p>
+  </section>
+
+  <section>
+    <h2>Сопровождение объектов</h2>
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th>Модель</th>
+            <th>Объектов<span class="sub">на первом кадре</span></th>
+            <th>Номеров выдано<span class="sub">за видео</span></th>
+            <th>Вернулись<span class="sub">под своим номером</span></th>
+            <th>Поправлено рамок<span class="sub">по детектору</span></th>
+            <th>Снято детектором<span class="sub">трекер на пустом месте</span></th>
+            <th>Ведутся<span class="sub">в конце видео</span></th>
+            <th>Память, МБ<span class="sub">главный процесс</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group"><td colspan="8">video2 · четыре человека</td></tr>
+          <tr>
+            <td><span class="chip m5">YOLOv5n</span></td>
+            <td>4</td><td class="best">14</td><td>8</td><td>6</td><td>6</td><td>4</td><td>378</td>
+          </tr>
+          <tr>
+            <td><span class="chip m8">YOLOv8n</span></td>
+            <td>4</td><td>15</td><td class="best">9</td><td>5</td><td class="best">3</td><td class="best">7</td><td class="best">240</td>
+          </tr>
+          <tr>
+            <td><span class="chip m11">YOLO11n</span></td>
+            <td>4</td><td>19</td><td>8</td><td>8</td><td>5</td><td>6</td><td>241</td>
+          </tr>
+          <tr class="group"><td colspan="8">person7 · один человек</td></tr>
+          <tr>
+            <td><span class="chip m5">YOLOv5n</span></td>
+            <td>1</td><td class="best">1</td><td>3</td><td>6</td><td>1</td><td>1</td><td>457</td>
+          </tr>
+          <tr>
+            <td><span class="chip m8">YOLOv8n</span></td>
+            <td>1</td><td class="best">1</td><td>3</td><td>7</td><td>1</td><td>1</td><td>324</td>
+          </tr>
+          <tr>
+            <td><span class="chip m11">YOLO11n</span></td>
+            <td>1</td><td class="best">1</td><td>2</td><td>7</td><td>1</td><td>1</td><td>327</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Счётчики сопровождения в обоих режимах совпали, в таблице они приведены один раз. На person7 человек несколько раз убегает из кадра и возвращается, и все три модели сохраняют ему номер #1 на всё видео.</p>
+  </section>
+
+  <section>
+    <h2>Что видно на видео</h2>
+    <ul>
+      <li><strong>person7</strong> (съёмка с высоты, один маленький человек на поле): все три модели находят человека на первом кадре и ведут его все 60 секунд. Когда он выбегает из кадра и возвращается, номер #1 сохраняется. На глаз разницы между моделями нет.</li>
+      <li><strong>video2</strong>: главного человека все три модели ведут всё видео. YOLOv8n и YOLO11n чаще находят маленьких людей на заднем плане, поэтому у них больше объектов и чуть ниже FPS.</li>
+      <li><strong>Общая ошибка всех трёх моделей:</strong> когда камера опускается, колени и руки снимающего внизу кадра принимаются за человека. Это ошибка самих детекторов, а не трекера.</li>
+    </ul>
+    <p class="note">Файлы: <code>out5_video2_yolo{5,8,11}.mp4</code>, <code>out5_person7_60s_original_yolo{5,8,11}.mp4</code> и те же с суффиксом <code>_perf</code> для режима performance.</p>
+  </section>
+
+  <section>
+    <h2>Как читать результаты</h2>
+    <ul>
+      <li><strong>FPS почти не зависит от модели.</strong> Детектор срабатывает примерно раз в секунду, а на каждом кадре работает трекер: 15–18 мс на объект. Поэтому FPS у трёх моделей на одном видео отличается не больше чем на 2.8 кадра в секунду.</li>
+      <li><strong>На video2 FPS у новых моделей чуть ниже, потому что они находят больше людей.</strong> Каждый найденный объект — ещё один трекер на процессоре.</li>
+      <li><strong>Режим performance ускоряет всё на 8–10%.</strong> Частота NPU в обоих режимах 1000 МГц, главное различие — частота памяти: 2112 МГц против 528 МГц. Сильнее всего ускоряется первый запуск детектора (на 32–48%). Вероятно, потому что при первом запуске NPU загружает веса модели из памяти, а её частота в режиме performance вчетверо выше.</li>
+      <li><strong>Более тяжёлые модели не оказались медленнее на запуск.</strong> Вычислений у YOLOv8n и YOLO11n больше, но выходы меньше: 145 значений на ячейку сетки против 255 у YOLOv5n с тремя якорями. Вероятная причина в том, что выходы нужно перенести с NPU и перевести из int8 во float на процессоре, и у YOLOv5n этих данных почти вдвое больше.</li>
+      <li><strong>YOLO11n выдала больше всего номеров на video2 (19).</strong> Она чаще находит частично видимых людей на фоне, и не каждого из них удаётся узнать по цвету одежды после потери.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Вывод</h2>
+    <p>В этой программе детектор работает редко, поэтому выбор модели почти не влияет на скорость, но сильно влияет на точность. <strong>YOLO11n</strong> точнее YOLOv5n на 9 пунктов mAP@0.5:0.95, меньше всех теряет при квантизации и работает с той же скоростью. YOLOv5n выигрывает только по размеру модели и объёму вычислений, что важно для схемы с детектором на каждом кадре. Режим performance даёт одинаковый прирост 8–10% всем трём моделям и на их сравнение не влияет.</p>
+  </section>
+</div>
+</body>
+</html>

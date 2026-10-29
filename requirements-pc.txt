@@ -1,0 +1,5 @@
+# on the PC (Linux, x86_64 or arm64): conversion and accuracy evaluation
+rknn-toolkit2==2.3.2  # must match librknnrt on the board
+onnxruntime
+opencv-python
+numpy

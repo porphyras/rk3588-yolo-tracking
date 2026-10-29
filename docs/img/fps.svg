@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="250" viewBox="0 0 760 250" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<text x="0" y="22" font-size="16" font-weight="600" fill="#8b949e">Detection on every frame, 795-frame video, FPS (higher is better)</text>
+<text x="238" y="68.0" font-size="14" text-anchor="end" fill="#8b949e">v1  · 1 NPU core</text>
+<rect x="250" y="46" width="50.2" height="34" rx="4" fill="#6e7681"/>
+<text x="308.2" y="68.0" font-size="15" font-weight="700" fill="#8b949e">17</text>
+<text x="238" y="116.0" font-size="14" text-anchor="end" fill="#8b949e">v2  · 3 threads, 3 NPU cores</text>
+<rect x="250" y="94" width="122.6" height="34" rx="4" fill="#3b82f6"/>
+<text x="380.6" y="116.0" font-size="15" font-weight="700" fill="#8b949e">42</text>
+<text x="238" y="164.0" font-size="14" text-anchor="end" fill="#8b949e">v3  · 3 processes + shared memory</text>
+<rect x="250" y="142" width="375.5" height="34" rx="4" fill="#2563eb"/>
+<text x="633.5" y="164.0" font-size="15" font-weight="700" fill="#8b949e">128</text>
+<text x="238" y="212.0" font-size="14" text-anchor="end" fill="#8b949e">v3  · + performance governors</text>
+<rect x="250" y="190" width="413.9" height="34" rx="4" fill="#16a34a"/>
+<text x="671.9" y="212.0" font-size="15" font-weight="700" fill="#8b949e">141</text>
+<line x1="294.0" y1="38" x2="294.0" y2="230" stroke="#ef4444" stroke-dasharray="4 4" stroke-width="1.5"/>
+<text x="300.0" y="244" font-size="12" fill="#ef4444">target: 15 FPS</text>
+</svg>

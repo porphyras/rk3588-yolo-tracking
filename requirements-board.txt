@@ -1,0 +1,4 @@
+# on the RK3588 board (Python 3.10)
+rknn-toolkit-lite2==2.3.2
+opencv-python>=4.10   # NanoTrack / ViTTrack need OpenCV with the tracking module (5.x on the board)
+numpy

@@ -1,0 +1,12 @@
+# videos, models and generated data stay local
+*.mp4
+*.MP4
+*.mov
+*.onnx
+*.rknn
+*.pt
+kalibrovka/
+tools/
+__pycache__/
+*.pyc
+.DS_Store
